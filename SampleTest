@@ -1,3 +1,6 @@
+    protected static final String EMAIL_CONTENT_COMPLETED_PATTERN = "The job has completed\\.";
+    private static final String INPUT_FILE = "PAYROLL.UOFM";
+
     // input files
     private static final String INPUT_FILE_MISSING = "PAYROLL.UOFM.MISSING";
     private static final String INPUT_FILE_EXISTING_CONTRIBUTION = "PAYROLL.UOFM.EXISTING";
@@ -157,3 +160,42 @@
             //@formatter:on
         };
     }
+
+    @ParameterizedTest(name = "[{index}]{0}")
+    @MethodSource("testData")
+    public void test(final String testName, final VerifyTableDefinition[] verifyTables, final String[] prepDataFiles,
+            final String[] expectedDataFiles, final String inputFile, final String inputDirectory,
+            final ExitStatus expectedExitStatus, final List<Class<? extends Throwable>> expectedExceptionTypes,
+            final boolean isExpectingEmail, final List<String> expectedEmailCcAddresses,
+            final String expectedEmailSubjectPattern, final String expectedEmailContentPattern,
+            @TempDir final Path tempDir) throws Exception {
+
+        final Path tempInputFile = tempDir.resolve(inputFile);
+        final Path inputPath = Path.of(inputDirectory, inputFile);
+        Files.copy(inputPath, tempInputFile);
+
+        final String tempDirPath =
+            tempDir.toString().endsWith(File.separator) ? tempDir.toString() : tempDir + File.separator;
+
+        final JobParameters jobParameters = makeJobParameters(inputFile, tempDirPath);
+
+        final EmailSentVerificationRequest expectedEmailVerifier;
+
+        if (isExpectingEmail) {
+            expectedEmailVerifier = testEmailSentVerifierConsumerFactory.make(expectedEmailCcAddresses,
+                expectedEmailSubjectPattern, expectedEmailContentPattern);
+        } else {
+            expectedEmailVerifier = testEmailSentVerifierConsumerFactory.makeEmpty();
+        }
+
+        batchJobTester.runTest(verifyTables, prepDataFiles, expectedDataFiles, job, jobParameters, BATCH_JOB_NAME,
+            expectedExitStatus, expectedExceptionTypes, expectedEmailVerifier);
+    }
+
+    private JobParameters makeJobParameters(final String inputFile, final String inputDirectory) {
+        final JobParametersBuilder jobParametersBuilder = new JobParametersBuilder();
+        jobParametersBuilder.addString(BatchJobParameter.INPUT_FILE_NAME, inputFile);
+        jobParametersBuilder.addString(BatchJobParameter.INPUT_DIRECTORY, inputDirectory);
+        return jobParametersBuilder.toJobParameters();
+    }
+}
